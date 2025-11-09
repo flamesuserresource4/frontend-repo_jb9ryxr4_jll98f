@@ -1,9 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import AppShell from './components/AppShell';
 import HeroCover from './components/HeroCover';
 import LoginSection from './components/LoginSection';
 import YearSelector from './components/YearSelector';
 import AttendanceCalculator from './components/AttendanceCalculator';
+import ErrorBoundary from './components/ErrorBoundary';
 
 // AttendanceDoc — Single dynamic screen with global state
 export default function App() {
@@ -20,19 +21,20 @@ export default function App() {
 
   // Local storage persistence (optional UX enhancement)
   React.useEffect(() => {
-    const saved = localStorage.getItem('attendancedoc_session');
-    if (saved) {
-      try {
-        const s = JSON.parse(saved);
-        setIsGuest(!!s.isGuest);
-        setLoggedInUser(s.loggedInUser || null);
-        setSelectedYear(s.selectedYear || null);
-        setAttendanceDate(s.attendanceDate || '');
-        setSubjectsList(Array.isArray(s.subjectsList) ? s.subjectsList : []);
-        setClassesAttended(s.classesAttended || {});
-        setClassesHeld(s.classesHeld || {});
-        setClassesRemaining(s.classesRemaining || {});
-      } catch {}
+    try {
+      const saved = localStorage.getItem('attendancedoc_session');
+      if (!saved) return;
+      const s = JSON.parse(saved);
+      setIsGuest(!!s.isGuest);
+      setLoggedInUser(s.loggedInUser || null);
+      setSelectedYear(s.selectedYear || null);
+      setAttendanceDate(s.attendanceDate || '');
+      setSubjectsList(Array.isArray(s.subjectsList) ? s.subjectsList : []);
+      setClassesAttended(s.classesAttended || {});
+      setClassesHeld(s.classesHeld || {});
+      setClassesRemaining(s.classesRemaining || {});
+    } catch (e) {
+      // ignore
     }
   }, []);
 
@@ -47,7 +49,11 @@ export default function App() {
       classesHeld,
       classesRemaining,
     };
-    localStorage.setItem('attendancedoc_session', JSON.stringify(payload));
+    try {
+      localStorage.setItem('attendancedoc_session', JSON.stringify(payload));
+    } catch (e) {
+      // ignore storage errors
+    }
   }, [isGuest, loggedInUser, selectedYear, attendanceDate, subjectsList, classesAttended, classesHeld, classesRemaining]);
 
   // Mock DB in localStorage for demo purpose (Users table)
@@ -60,14 +66,16 @@ export default function App() {
       return [];
     }
   };
-  const writeUsers = (rows) => localStorage.setItem(USERS_KEY, JSON.stringify(rows));
+  const writeUsers = (rows) => {
+    try { localStorage.setItem(USERS_KEY, JSON.stringify(rows)); } catch {}
+  };
   const createUser = (payload) => {
     const rows = readUsers();
     const exists = rows.find((r) => r.email === payload.email);
     if (exists) throw new Error('Email already registered');
     const now = new Date().toISOString();
     const rec = {
-      id: crypto.randomUUID(),
+      id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
       name: payload.name,
       roll_number: payload.roll_number,
       email: payload.email,
@@ -144,7 +152,9 @@ export default function App() {
 
   return (
     <AppShell user={loggedInUser} onLogout={handleLogout}>
-      <HeroCover />
+      <ErrorBoundary>
+        <HeroCover />
+      </ErrorBoundary>
 
       {/* Login Section */}
       <LoginSection visible={showLogin} onSignup={handleSignup} onSignin={handleSignin} onGuest={handleGuest} />
